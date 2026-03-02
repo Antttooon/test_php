@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test PHP + MySQL</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Отчеты по времени работы</h1>
+    <p class="hint">Источник данных: таблица <code>test_log_r</code></p>
+    <p id="periodInfo" class="hint"><span class="muted">Период данных: загрузка...</span></p>
+
+    <section class="card">
+      <h2>1) Время по всем работникам за дату</h2>
+      <form id="dayForm">
+        <label>
+          Дата:
+          <input type="date" name="date" required>
+        </label>
+        <button type="submit">Построить отчет</button>
+      </form>
+      <div id="dayResult" class="result"></div>
+    </section>
+
+    <section class="card">
+      <h2>2) Время одного работника по дням</h2>
+      <form id="workerForm">
+        <label>
+          ID работника:
+          <input type="text" name="id" maxlength="10" required placeholder="например, 0099">
+        </label>
+        <label>
+          С:
+          <input type="date" name="from" required>
+        </label>
+        <label>
+          По:
+          <input type="date" name="to" required>
+        </label>
+        <button type="submit">Построить отчет</button>
+      </form>
+      <div id="workerResult" class="result"></div>
+    </section>
+  </main>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

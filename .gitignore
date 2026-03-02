@@ -1,0 +1,27 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies
+vendor/
+node_modules/
+
+# Logs / temp
+*.log
+*.tmp
+tmp/
+temp/
+task/
+
+# Build / coverage artifacts
+coverage/
+.phpunit.result.cache
+
+# Docker / local runtime leftovers
+*.pid
