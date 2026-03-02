@@ -7,6 +7,7 @@ body {
   font-family: Arial, sans-serif;
   background: #f4f6fb;
   color: #1d2433;
+  line-height: 1.4;
 }
 
 .container {
@@ -30,6 +31,7 @@ h1 {
   border-radius: 10px;
   padding: 16px;
   margin: 16px 0;
+  box-shadow: 0 6px 18px rgba(20, 30, 60, 0.05);
 }
 
 form {
@@ -49,18 +51,32 @@ label {
 input, button {
   padding: 8px 10px;
   font-size: 14px;
+  border-radius: 8px;
+}
+
+input {
+  border: 1px solid #c8d3e6;
+  background: #fff;
+}
+
+input:focus {
+  outline: none;
+  border-color: #0b62d6;
+  box-shadow: 0 0 0 3px rgba(11, 98, 214, 0.12);
 }
 
 button {
-  background: #0b62d6;
+  background: linear-gradient(180deg, #1d78eb 0%, #0b62d6 100%);
   color: #fff;
   border: none;
-  border-radius: 6px;
   cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 10px rgba(11, 98, 214, 0.25);
 }
 
 button:hover {
-  background: #0a54b8;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(11, 98, 214, 0.3);
 }
 
 .result {
@@ -69,17 +85,72 @@ button:hover {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll--limited {
+  max-height: 430px;
+  overflow-y: auto;
+  border: 1px solid #d9e0ee;
+  border-radius: 8px;
+  position: relative;
+}
+
+.table-scroll--limited table {
+  border: none;
 }
 
 th, td {
   border: 1px solid #d9e0ee;
-  padding: 8px;
+  padding: 10px;
   text-align: left;
 }
 
 th {
   background: #edf3ff;
+}
+
+.table-scroll--limited thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #edf3ff;
+  box-shadow: inset 0 -1px 0 #d9e0ee;
+}
+
+tbody tr:nth-child(even) {
+  background: #fbfdff;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: #eaf3ff !important;
+}
+
+.clickable-row:focus {
+  outline: 2px solid #0b62d6;
+  outline-offset: -2px;
+}
+
+.context-chip {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #27447a;
+  font-size: 13px;
 }
 
 .muted {
