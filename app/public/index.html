@@ -1,46 +1,52 @@
 <!doctype html>
-<html lang="ru">
+<html lang="sr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Test PHP + MySQL</title>
+  <title data-i18n="title">Test PHP + MySQL</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
+  <header class="lang-switcher">
+    <span class="lang-label">Language:</span>
+    <a href="?lang=en" id="langEn" class="lang-link" data-i18n="langEn">Engleski</a>
+    <span class="lang-sep">|</span>
+    <a href="?lang=sr" id="langSr" class="lang-link" data-i18n="langSr">Srpski</a>
+  </header>
   <main class="container">
-    <h1>Отчеты по времени работы</h1>
-    <p id="periodInfo" class="hint"><span class="muted">Период данных: загрузка...</span></p>
+    <h1 data-i18n="h1">Izveštaji o radnom vremenu</h1>
+    <p id="periodInfo" class="hint"><span class="muted" data-i18n="periodLoading">Period podataka: učitavanje...</span></p>
 
     <section class="card">
-      <h2>1) Время по всем работникам за дату</h2>
-      <p class="hint">После построения отчета можно кликнуть по строке работника, чтобы сразу открыть отчет #2 по нему.</p>
+      <h2 data-i18n="section1Title">1) Vreme po svim radnicima za datum</h2>
+      <p class="hint" data-i18n="section1Hint">Nakon izrade izveštaja možete kliknuti na red radnika da odmah otvorite izveštaj #2 za njega.</p>
       <form id="dayForm">
         <label>
-          Дата:
+          <span data-i18n="date">Datum</span>:
           <input type="date" name="date" required>
         </label>
-        <button type="submit">Построить отчет</button>
+        <button type="submit" data-i18n="buildReport">Izradi izveštaj</button>
       </form>
       <div id="dayResult" class="result"></div>
     </section>
 
     <section class="card">
-      <h2>2) Время одного работника по дням</h2>
+      <h2 data-i18n="section2Title">2) Vreme jednog radnika po danima</h2>
       <p id="workerContext" class="hint muted"></p>
       <form id="workerForm">
         <label>
-          ID работника:
-          <input type="text" name="id" maxlength="10" required placeholder="например, 0099">
+          <span data-i18n="workerId">ID radnika</span>:
+          <input type="text" name="id" maxlength="10" required data-i18n-placeholder="workerIdPlaceholder" placeholder="npr. 0099">
         </label>
         <label>
-          С:
+          <span data-i18n="from">Od</span>:
           <input type="date" name="from" required>
         </label>
         <label>
-          По:
+          <span data-i18n="to">Do</span>:
           <input type="date" name="to" required>
         </label>
-        <button type="submit">Построить отчет</button>
+        <button type="submit" data-i18n="buildReport">Izradi izveštaj</button>
       </form>
       <div id="workerResult" class="result"></div>
     </section>

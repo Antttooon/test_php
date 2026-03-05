@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/Db.php';
 require_once __DIR__ . '/../src/Http.php';
+require_once __DIR__ . '/../src/I18n.php';
 require_once __DIR__ . '/../src/ReportsService.php';
 
 function isValidDate(string $date): bool
@@ -25,10 +26,12 @@ function queryParam(string $name): ?string
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
 if (str_starts_with($uri, '/api/')) {
+    $i18n = I18n::fromRequest();
+
     try {
         $service = new ReportsService(Db::pdo());
     } catch (Throwable $e) {
-        Http::serverError('Database connection failed');
+        Http::serverError($i18n->t('error.db_connection'));
         exit;
     }
 
@@ -48,7 +51,7 @@ if (str_starts_with($uri, '/api/')) {
         if ($uri === '/api/report/day') {
             $date = queryParam('date');
             if ($date === null || !isValidDate($date)) {
-                Http::badRequest('Invalid or missing `date` (expected YYYY-MM-DD).');
+                Http::badRequest($i18n->t('error.invalid_date'));
                 exit;
             }
 
@@ -70,17 +73,17 @@ if (str_starts_with($uri, '/api/')) {
             $to = queryParam('to');
 
             if ($workerId === null || strlen($workerId) > 10) {
-                Http::badRequest('Invalid or missing `id` (max 10 chars).');
+                Http::badRequest($i18n->t('error.invalid_id'));
                 exit;
             }
 
             if ($from === null || $to === null || !isValidDate($from) || !isValidDate($to)) {
-                Http::badRequest('Invalid or missing `from`/`to` (expected YYYY-MM-DD).');
+                Http::badRequest($i18n->t('error.invalid_from_to'));
                 exit;
             }
 
             if ($from > $to) {
-                Http::badRequest('`from` must be less than or equal to `to`.');
+                Http::badRequest($i18n->t('error.from_gt_to'));
                 exit;
             }
 
@@ -100,11 +103,11 @@ if (str_starts_with($uri, '/api/')) {
 
         Http::json([
             'ok' => false,
-            'error' => 'Unknown API route.',
+            'error' => $i18n->t('error.unknown_route'),
         ], 404);
         exit;
     } catch (Throwable $e) {
-        Http::serverError();
+        Http::serverError($i18n->t('error.server'));
         exit;
     }
 }
