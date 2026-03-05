@@ -16,4 +16,3 @@ services:
 # Раскомментировать после получения сертификата:
 # volumes:
 #   certbot-data:
-#     external: true
