@@ -148,7 +148,7 @@ docker run --rm \
   certbot/certbot certonly --webroot \
   -w /var/www/certbot \
   -d tst-php.vc-manager.me \
-  --email your@email.com \
+  --email emailyour@tst-php.vc-manager.me \
   --agree-tos --no-eff-email
 ```
 Replace `tst-php.vc-manager.me` and `your@email.com` with your domain and email. If your project (folder) name is not `test_php`, use `your_folder_certbot-data` instead of `test_php_certbot-data` (check with `docker volume ls` after the next step).

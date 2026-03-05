@@ -8,11 +8,10 @@ services:
       - ./app:/var/www/html:ro
       - ./docker/nginx/production.conf:/etc/nginx/conf.d/default.conf:ro
       - ./certbot-webroot:/var/www/certbot:ro
-      # Раскомментировать после получения сертификата:
-      # - ./docker/nginx/ssl-params.conf:/etc/nginx/conf.d/ssl-params.conf:ro
-      # - ./docker/nginx/production-ssl.conf:/etc/nginx/conf.d/production-ssl.conf:ro
-      # - certbot-data:/etc/letsencrypt:ro
+      - ./docker/nginx/ssl-params.conf:/etc/nginx/conf.d/ssl-params.conf:ro
+      - ./docker/nginx/production-ssl.conf:/etc/nginx/conf.d/production-ssl.conf:ro
+      - certbot-data:/etc/letsencrypt:ro
 
-# Раскомментировать после получения сертификата:
-# volumes:
-#   certbot-data:
+
+volumes:
+  certbot-data:
