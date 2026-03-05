@@ -18,6 +18,7 @@ node_modules/
 tmp/
 temp/
 task/
+!task/test_log_r.sql
 
 # Build / coverage artifacts
 coverage/
