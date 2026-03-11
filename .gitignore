@@ -12,6 +12,9 @@
 vendor/
 node_modules/
 
+# Local / internal docs (not for repo)
+DATA_ANALYSIS.md
+
 # Logs / temp
 *.log
 *.tmp

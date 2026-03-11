@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 final class ReportsService
 {
-    private const CUTOFF_TIME = '06:00:00';
+    private const DEFAULT_CUTOFF_TIME = '06:00:00';
 
     public function __construct(private readonly PDO $pdo)
     {
@@ -16,8 +16,9 @@ final class ReportsService
      */
     private static function timestampToWorkDay(\DateTimeImmutable $dt): string
     {
+        $cutoffTime = $_ENV['WORKDAY_CUTOFF_TIME'] ?? getenv('WORKDAY_CUTOFF_TIME') ?: self::DEFAULT_CUTOFF_TIME;
         $time = $dt->format('H:i:s');
-        if ($time < self::CUTOFF_TIME) {
+        if ($time < $cutoffTime) {
             return $dt->modify('-1 day')->format('Y-m-d');
         }
         return $dt->format('Y-m-d');
@@ -165,7 +166,7 @@ SQL;
         $to = (new \DateTimeImmutable($date . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
         $events = $this->fetchEvents($from, $to);
         $intervals = $this->buildIntervals($events);
-        $byWorker = [];
+        $byWorkerPosla = [];
         foreach ($intervals as $iv) {
             $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $iv['start_dt']);
             if ($dt === false) {
@@ -175,24 +176,31 @@ SQL;
             if ($workDay !== $date) {
                 continue;
             }
-            $id = $iv['id_radnika'];
-            if (!isset($byWorker[$id])) {
-                $byWorker[$id] = ['id_radnika' => $id, 'ime_radnika' => $iv['ime_radnika'], 'intervals' => []];
+            $key = $iv['id_radnika'] . "\0" . $iv['id_posla'];
+            if (!isset($byWorkerPosla[$key])) {
+                $byWorkerPosla[$key] = [
+                    'id_radnika' => $iv['id_radnika'],
+                    'ime_radnika' => $iv['ime_radnika'],
+                    'id_posla' => $iv['id_posla'],
+                    'intervals' => [],
+                ];
             }
-            $byWorker[$id]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+            $byWorkerPosla[$key]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
         }
         $result = [];
-        foreach ($byWorker as $id => $data) {
+        foreach ($byWorkerPosla as $data) {
             $seconds = $this->mergeIntervalSeconds($data['intervals']);
             $result[] = [
-                'id_radnika' => $id,
+                'id_radnika' => $data['id_radnika'],
                 'ime_radnika' => $data['ime_radnika'],
+                'id_posla' => $data['id_posla'],
                 'seconds' => $seconds,
                 'duration' => self::secondsToDuration($seconds),
             ];
         }
         usort($result, static function (array $a, array $b): int {
-            return strcmp($a['id_radnika'], $b['id_radnika']);
+            $c = strcmp($a['id_radnika'], $b['id_radnika']);
+            return $c !== 0 ? $c : $a['id_posla'] <=> $b['id_posla'];
         });
         return $result;
     }
@@ -233,7 +241,7 @@ SQL;
         $to = (new \DateTimeImmutable($toDate . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
         $events = $this->fetchEvents($from, $to);
         $intervals = $this->buildIntervals($events);
-        $byWorkDay = [];
+        $byWorkDayPosla = [];
         foreach ($intervals as $iv) {
             if ($iv['id_radnika'] !== $workerId) {
                 continue;
@@ -246,24 +254,32 @@ SQL;
             if ($workDay < $fromDate || $workDay > $toDate) {
                 continue;
             }
-            if (!isset($byWorkDay[$workDay])) {
-                $byWorkDay[$workDay] = ['ime_radnika' => $iv['ime_radnika'], 'intervals' => []];
+            $key = $workDay . "\0" . $iv['id_posla'];
+            if (!isset($byWorkDayPosla[$key])) {
+                $byWorkDayPosla[$key] = [
+                    'ime_radnika' => $iv['ime_radnika'],
+                    'date' => $workDay,
+                    'id_posla' => $iv['id_posla'],
+                    'intervals' => [],
+                ];
             }
-            $byWorkDay[$workDay]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+            $byWorkDayPosla[$key]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
         }
         $result = [];
-        foreach ($byWorkDay as $workDay => $data) {
+        foreach ($byWorkDayPosla as $data) {
             $seconds = $this->mergeIntervalSeconds($data['intervals']);
             $result[] = [
                 'id_radnika' => $workerId,
                 'ime_radnika' => $data['ime_radnika'],
-                'date' => $workDay,
+                'date' => $data['date'],
+                'id_posla' => $data['id_posla'],
                 'seconds' => $seconds,
                 'duration' => self::secondsToDuration($seconds),
             ];
         }
         usort($result, static function (array $a, array $b): int {
-            return strcmp($a['date'], $b['date']);
+            $c = strcmp($a['date'], $b['date']);
+            return $c !== 0 ? $c : $a['id_posla'] <=> $b['id_posla'];
         });
         return $result;
     }
