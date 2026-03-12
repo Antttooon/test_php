@@ -20,7 +20,22 @@ Minimal application for a test assignment:
 - Time is computed from valid `start(2) -> end(6)` pairs per `id_posla`.
 - If there is a correction (`3`) between `start` and `end`, the start before that correction is excluded.
 - Report totals are the sum of durations of all valid tasks in the period.
-- Overlapping tasks are not merged; in some cases the total for a day can exceed 24 hours (expected for the current “ukupno vreme rada” interpretation).
+- Within one employee + job + day group, overlapping intervals are merged; totals across different jobs for the same day can still exceed 24 hours.
+- The “work day” boundary (cutoff time) is taken from the `WORKDAY_CUTOFF_TIME` environment variable (format `HH:MM:SS`); if it is not set, the default `06:00:00` is used.
+
+### How employee working time is calculated
+
+- **Raw data**: the table `test_log_r` contains events for task start (`id_aktivnosti = 2`), correction (`3`) and end (`6`) per job (`id_posla`) and worker (`id_radnika`).
+- For each job, the app builds intervals `(start_dt, end_dt)` using the rules above (last valid start before end, corrections between start and end invalidate that start).
+- Each interval is attributed to a **factory work day** based on the cutoff time (by default 06:00–05:59 of the next calendar day).
+- **Report 1 (by day)**:
+  - For the selected work day, all intervals that belong to this day are taken.
+  - Intervals are grouped by worker and job; inside each group overlapping intervals are merged and converted to seconds.
+  - The UI shows the per‑worker totals and the grand total across all workers for this day.
+- **Report 2 (by worker)**:
+  - For a given worker and date range, all intervals of this worker whose work day is inside the range are taken.
+  - Intervals are grouped by work day and job; inside each group overlapping intervals are merged and converted to seconds.
+  - The result is a list of rows “date + job + duration” for the selected worker.
 
 ## Project Structure
 
@@ -80,6 +95,7 @@ See `.env.example`:
 - `DB_NAME`
 - `DB_USER`
 - `DB_PASS`
+- `WORKDAY_CUTOFF_TIME` — optional, work day cutoff time (`HH:MM:SS`, default `06:00:00`)
 
 Defaults are for the Docker network (`db`, user `app`). The app loads `app/.env` if present — on deploy, create it with your real DB credentials.
 
