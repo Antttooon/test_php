@@ -15,6 +15,15 @@ final class ReportsServiceTest extends TestCase
         $this->pdo = new PDO('sqlite::memory:');
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+        // Emulate MySQL TIMESTAMP(datum, vreme) in SQLite for tests.
+        $this->pdo->sqliteCreateFunction(
+            'TIMESTAMP',
+            static function (string $date, string $time): string {
+                return $date . ' ' . $time;
+            },
+            2
+        );
+
         $this->pdo->exec("
             CREATE TABLE test_log_r (
                 id INTEGER PRIMARY KEY,
