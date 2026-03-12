@@ -20,7 +20,7 @@ Minimal application for a test assignment:
 - Time is computed from valid `start(2) -> end(6)` pairs per `id_posla`.
 - If there is a correction (`3`) between `start` and `end`, the start before that correction is excluded.
 - Report totals are the sum of durations of all valid tasks in the period.
-- Within one employee + job + day group, overlapping intervals are merged; totals across different jobs for the same day can still exceed 24 hours.
+- For each worker and work day, all their task intervals for that day are merged so overlapping jobs are not double-counted; totals across different workers can still exceed 24 hours.
 - The “work day” boundary (cutoff time) is taken from the `WORKDAY_CUTOFF_TIME` environment variable (format `HH:MM:SS`); if it is not set, the default `06:00:00` is used.
 
 ### How employee working time is calculated
@@ -30,12 +30,12 @@ Minimal application for a test assignment:
 - Each interval is attributed to a **factory work day** based on the cutoff time (by default 06:00–05:59 of the next calendar day).
 - **Report 1 (by day)**:
   - For the selected work day, all intervals that belong to this day are taken.
-  - Intervals are grouped by worker and job; inside each group overlapping intervals are merged and converted to seconds.
-  - The UI shows the per‑worker totals and the grand total across all workers for this day.
+  - Intervals are grouped only by worker; for each worker all task intervals for that day are merged and converted to seconds.
+  - The UI shows one row per worker (real working time for that day) and the grand total across all workers.
 - **Report 2 (by worker)**:
   - For a given worker and date range, all intervals of this worker whose work day is inside the range are taken.
-  - Intervals are grouped by work day and job; inside each group overlapping intervals are merged and converted to seconds.
-  - The result is a list of rows “date + job + duration” for the selected worker.
+  - Intervals are grouped by work day; for each day all task intervals are merged and converted to seconds.
+  - The result is a list of rows “date + total duration for that day” for the selected worker (one row per day).
 
 ## Project Structure
 
