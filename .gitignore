@@ -26,6 +26,7 @@ task/
 # Build / coverage artifacts
 coverage/
 .phpunit.result.cache
+phpunit.phar
 
 # Docker / local runtime leftovers
 *.pid
