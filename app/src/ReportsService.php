@@ -4,83 +4,203 @@ declare(strict_types=1);
 
 final class ReportsService
 {
+    private const CUTOFF_TIME = '06:00:00';
+
     public function __construct(private readonly PDO $pdo)
     {
     }
 
-    public function reportByDay(string $date): array
+    /**
+     * Returns the factory work day (radni dan) for the given timestamp.
+     * Work day runs 06:00–05:59 next day; times before 06:00 belong to the previous calendar day.
+     */
+    private static function timestampToWorkDay(\DateTimeImmutable $dt): string
+    {
+        $time = $dt->format('H:i:s');
+        if ($time < self::CUTOFF_TIME) {
+            return $dt->modify('-1 day')->format('Y-m-d');
+        }
+        return $dt->format('Y-m-d');
+    }
+
+    /**
+     * Fetch raw events (activity 2, 3, 6) in the given calendar date range (inclusive).
+     *
+     * @return list<array{id_posla: int, id_aktivnosti: int, id_radnika: string, ime_radnika: string, event_dt: string}>
+     */
+    private function fetchEvents(string $dateFrom, string $dateTo): array
     {
         $sql = <<<SQL
-WITH events AS (
-    SELECT
-        id,
-        id_posla,
-        id_aktivnosti,
-        id_radnika,
-        ime_radnika,
-        TIMESTAMP(datum, vreme) AS event_dt
-    FROM test_log_r
-    WHERE id_aktivnosti IN (2, 3, 6)
-      AND id_posla IS NOT NULL
-),
-end_events AS (
-    SELECT
-        e.id AS end_id,
-        e.id_posla,
-        e.id_radnika,
-        e.ime_radnika,
-        e.event_dt AS end_dt
-    FROM events e
-    WHERE e.id_aktivnosti = 6
-),
-paired AS (
-    SELECT
-        ee.id_radnika,
-        ee.ime_radnika,
-        ee.end_dt,
-        (
-            SELECT MAX(s.event_dt)
-            FROM events s
-            WHERE s.id_posla = ee.id_posla
-              AND s.id_aktivnosti = 2
-              AND s.event_dt < ee.end_dt
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM events c
-                    WHERE c.id_posla = ee.id_posla
-                      AND c.id_aktivnosti = 3
-                      AND c.event_dt > s.event_dt
-                      AND c.event_dt < ee.end_dt
-              )
-        ) AS start_dt
-    FROM end_events ee
-)
-SELECT
-    id_radnika,
-    MAX(ime_radnika) AS ime_radnika,
-    SUM(TIMESTAMPDIFF(SECOND, start_dt, end_dt)) AS total_seconds
-FROM paired
-WHERE start_dt IS NOT NULL
-  AND DATE(end_dt) = :report_date
-GROUP BY id_radnika
-ORDER BY id_radnika ASC
+            SELECT
+                id_posla,
+                id_aktivnosti,
+                id_radnika,
+                ime_radnika,
+                TIMESTAMP(datum, vreme) AS event_dt
+            FROM test_log_r
+            WHERE id_aktivnosti IN (2, 3, 6)
+              AND id_posla IS NOT NULL
+              AND datum BETWEEN :date_from AND :date_to
+            ORDER BY id_posla, event_dt
 SQL;
-
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(['report_date' => $date]);
-        $rows = $stmt->fetchAll();
-
+        $stmt->execute(['date_from' => $dateFrom, 'date_to' => $dateTo]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         return array_map(static function (array $row): array {
-            $seconds = (int) $row['total_seconds'];
             return [
+                'id_posla' => (int) $row['id_posla'],
+                'id_aktivnosti' => (int) $row['id_aktivnosti'],
                 'id_radnika' => (string) $row['id_radnika'],
                 'ime_radnika' => (string) $row['ime_radnika'],
-                'seconds' => $seconds,
-                'duration' => self::secondsToDuration($seconds),
+                'event_dt' => (string) $row['event_dt'],
             ];
         }, $rows);
     }
 
+    /**
+     * Build (start_dt, end_dt) pairs per job with correction logic; expand to all workers involved (start and end).
+     *
+     * @param list<array{id_posla: int, id_aktivnosti: int, id_radnika: string, ime_radnika: string, event_dt: string}> $events
+     * @return list<array{id_radnika: string, ime_radnika: string, id_posla: int, start_dt: string, end_dt: string}>
+     */
+    private function buildIntervals(array $events): array
+    {
+        $byPosla = [];
+        foreach ($events as $e) {
+            $byPosla[$e['id_posla']][] = $e;
+        }
+        $intervals = [];
+        foreach ($byPosla as $idPosla => $list) {
+            $ends = [];
+            foreach ($list as $e) {
+                if ($e['id_aktivnosti'] === 6) {
+                    $ends[] = ['dt' => $e['event_dt'], 'id_radnika' => $e['id_radnika'], 'ime_radnika' => $e['ime_radnika']];
+                }
+            }
+            foreach ($ends as $end) {
+                $endDt = $end['dt'];
+                $validStart = null;
+                $startWorker = null;
+                foreach ($list as $e) {
+                    if ($e['id_aktivnosti'] !== 2 || $e['event_dt'] >= $endDt) {
+                        continue;
+                    }
+                    $hasCorrection = false;
+                    foreach ($list as $c) {
+                        if ($c['id_aktivnosti'] === 3 && $c['event_dt'] > $e['event_dt'] && $c['event_dt'] < $endDt) {
+                            $hasCorrection = true;
+                            break;
+                        }
+                    }
+                    if (!$hasCorrection && ($validStart === null || $e['event_dt'] > $validStart)) {
+                        $validStart = $e['event_dt'];
+                        $startWorker = ['id_radnika' => $e['id_radnika'], 'ime_radnika' => $e['ime_radnika']];
+                    }
+                }
+                if ($validStart === null) {
+                    continue;
+                }
+                $workers = [$startWorker];
+                if ($startWorker['id_radnika'] !== $end['id_radnika'] || $startWorker['ime_radnika'] !== $end['ime_radnika']) {
+                    $workers[] = ['id_radnika' => $end['id_radnika'], 'ime_radnika' => $end['ime_radnika']];
+                }
+                foreach ($workers as $w) {
+                    $intervals[] = [
+                        'id_radnika' => $w['id_radnika'],
+                        'ime_radnika' => $w['ime_radnika'],
+                        'id_posla' => $idPosla,
+                        'start_dt' => $validStart,
+                        'end_dt' => $endDt,
+                    ];
+                }
+            }
+        }
+        return $intervals;
+    }
+
+    /**
+     * Merge overlapping intervals and return total seconds.
+     *
+     * @param list<array{start_dt: string, end_dt: string}> $intervals
+     */
+    private function mergeIntervalSeconds(array $intervals): int
+    {
+        if ($intervals === []) {
+            return 0;
+        }
+        usort($intervals, static function (array $a, array $b): int {
+            return strcmp($a['start_dt'], $b['start_dt']);
+        });
+        $merged = [];
+        $curStart = $intervals[0]['start_dt'];
+        $curEnd = $intervals[0]['end_dt'];
+        for ($i = 1; $i < count($intervals); $i++) {
+            $nextStart = $intervals[$i]['start_dt'];
+            $nextEnd = $intervals[$i]['end_dt'];
+            if ($nextStart <= $curEnd) {
+                if ($nextEnd > $curEnd) {
+                    $curEnd = $nextEnd;
+                }
+            } else {
+                $merged[] = ['start_dt' => $curStart, 'end_dt' => $curEnd];
+                $curStart = $nextStart;
+                $curEnd = $nextEnd;
+            }
+        }
+        $merged[] = ['start_dt' => $curStart, 'end_dt' => $curEnd];
+        $total = 0;
+        foreach ($merged as $m) {
+            $s = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $m['start_dt']);
+            $e = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $m['end_dt']);
+            if ($s !== false && $e !== false) {
+                $total += $e->getTimestamp() - $s->getTimestamp();
+            }
+        }
+        return $total;
+    }
+
+    public function reportByDay(string $date): array
+    {
+        $from = (new \DateTimeImmutable($date . ' 00:00:00'))->modify('-1 day')->format('Y-m-d');
+        $to = (new \DateTimeImmutable($date . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
+        $events = $this->fetchEvents($from, $to);
+        $intervals = $this->buildIntervals($events);
+        $byWorker = [];
+        foreach ($intervals as $iv) {
+            $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $iv['start_dt']);
+            if ($dt === false) {
+                continue;
+            }
+            $workDay = self::timestampToWorkDay($dt);
+            if ($workDay !== $date) {
+                continue;
+            }
+            $id = $iv['id_radnika'];
+            if (!isset($byWorker[$id])) {
+                $byWorker[$id] = ['id_radnika' => $id, 'ime_radnika' => $iv['ime_radnika'], 'intervals' => []];
+            }
+            $byWorker[$id]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+        }
+        $result = [];
+        foreach ($byWorker as $id => $data) {
+            $seconds = $this->mergeIntervalSeconds($data['intervals']);
+            $result[] = [
+                'id_radnika' => $id,
+                'ime_radnika' => $data['ime_radnika'],
+                'seconds' => $seconds,
+                'duration' => self::secondsToDuration($seconds),
+            ];
+        }
+        usort($result, static function (array $a, array $b): int {
+            return strcmp($a['id_radnika'], $b['id_radnika']);
+        });
+        return $result;
+    }
+
+    /**
+     * Reportable date range: from one day before first datum (so work started before 06:00
+     * on the first data day is attributed to that earlier work day) through last datum.
+     */
     public function availablePeriod(): ?array
     {
         $sql = <<<SQL
@@ -98,89 +218,54 @@ SQL;
             return null;
         }
 
+        $firstDatum = (string) $row['date_from'];
+        $reportFrom = (new \DateTimeImmutable($firstDatum . ' 00:00:00'))->modify('-1 day')->format('Y-m-d');
+
         return [
-            'from' => (string) $row['date_from'],
+            'from' => $reportFrom,
             'to' => (string) $row['date_to'],
         ];
     }
 
     public function reportByWorker(string $workerId, string $fromDate, string $toDate): array
     {
-        $sql = <<<SQL
-WITH events AS (
-    SELECT
-        id,
-        id_posla,
-        id_aktivnosti,
-        id_radnika,
-        ime_radnika,
-        TIMESTAMP(datum, vreme) AS event_dt
-    FROM test_log_r
-    WHERE id_aktivnosti IN (2, 3, 6)
-      AND id_posla IS NOT NULL
-),
-end_events AS (
-    SELECT
-        e.id AS end_id,
-        e.id_posla,
-        e.id_radnika,
-        e.ime_radnika,
-        e.event_dt AS end_dt
-    FROM events e
-    WHERE e.id_aktivnosti = 6
-),
-paired AS (
-    SELECT
-        ee.id_radnika,
-        ee.ime_radnika,
-        ee.end_dt,
-        (
-            SELECT MAX(s.event_dt)
-            FROM events s
-            WHERE s.id_posla = ee.id_posla
-              AND s.id_aktivnosti = 2
-              AND s.event_dt < ee.end_dt
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM events c
-                    WHERE c.id_posla = ee.id_posla
-                      AND c.id_aktivnosti = 3
-                      AND c.event_dt > s.event_dt
-                      AND c.event_dt < ee.end_dt
-              )
-        ) AS start_dt
-    FROM end_events ee
-)
-SELECT
-    DATE(end_dt) AS work_date,
-    MAX(ime_radnika) AS ime_radnika,
-    SUM(TIMESTAMPDIFF(SECOND, start_dt, end_dt)) AS total_seconds
-FROM paired
-WHERE start_dt IS NOT NULL
-  AND id_radnika = :worker_id
-  AND DATE(end_dt) BETWEEN :date_from AND :date_to
-GROUP BY DATE(end_dt)
-ORDER BY DATE(end_dt) ASC
-SQL;
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            'worker_id' => $workerId,
-            'date_from' => $fromDate,
-            'date_to' => $toDate,
-        ]);
-        $rows = $stmt->fetchAll();
-
-        return array_map(static function (array $row) use ($workerId): array {
-            $seconds = (int) $row['total_seconds'];
-            return [
+        $from = (new \DateTimeImmutable($fromDate . ' 00:00:00'))->modify('-1 day')->format('Y-m-d');
+        $to = (new \DateTimeImmutable($toDate . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
+        $events = $this->fetchEvents($from, $to);
+        $intervals = $this->buildIntervals($events);
+        $byWorkDay = [];
+        foreach ($intervals as $iv) {
+            if ($iv['id_radnika'] !== $workerId) {
+                continue;
+            }
+            $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $iv['start_dt']);
+            if ($dt === false) {
+                continue;
+            }
+            $workDay = self::timestampToWorkDay($dt);
+            if ($workDay < $fromDate || $workDay > $toDate) {
+                continue;
+            }
+            if (!isset($byWorkDay[$workDay])) {
+                $byWorkDay[$workDay] = ['ime_radnika' => $iv['ime_radnika'], 'intervals' => []];
+            }
+            $byWorkDay[$workDay]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+        }
+        $result = [];
+        foreach ($byWorkDay as $workDay => $data) {
+            $seconds = $this->mergeIntervalSeconds($data['intervals']);
+            $result[] = [
                 'id_radnika' => $workerId,
-                'ime_radnika' => (string) $row['ime_radnika'],
-                'date' => (string) $row['work_date'],
+                'ime_radnika' => $data['ime_radnika'],
+                'date' => $workDay,
                 'seconds' => $seconds,
                 'duration' => self::secondsToDuration($seconds),
             ];
-        }, $rows);
+        }
+        usort($result, static function (array $a, array $b): int {
+            return strcmp($a['date'], $b['date']);
+        });
+        return $result;
     }
 
     private static function secondsToDuration(int $seconds): string
