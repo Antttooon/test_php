@@ -166,7 +166,7 @@ SQL;
         $to = (new \DateTimeImmutable($date . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
         $events = $this->fetchEvents($from, $to);
         $intervals = $this->buildIntervals($events);
-        $byWorkerPosla = [];
+        $byWorker = [];
         foreach ($intervals as $iv) {
             $dt = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $iv['start_dt']);
             if ($dt === false) {
@@ -176,31 +176,28 @@ SQL;
             if ($workDay !== $date) {
                 continue;
             }
-            $key = $iv['id_radnika'] . "\0" . $iv['id_posla'];
-            if (!isset($byWorkerPosla[$key])) {
-                $byWorkerPosla[$key] = [
+            $id = $iv['id_radnika'];
+            if (!isset($byWorker[$id])) {
+                $byWorker[$id] = [
                     'id_radnika' => $iv['id_radnika'],
                     'ime_radnika' => $iv['ime_radnika'],
-                    'id_posla' => $iv['id_posla'],
                     'intervals' => [],
                 ];
             }
-            $byWorkerPosla[$key]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+            $byWorker[$id]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
         }
         $result = [];
-        foreach ($byWorkerPosla as $data) {
+        foreach ($byWorker as $data) {
             $seconds = $this->mergeIntervalSeconds($data['intervals']);
             $result[] = [
                 'id_radnika' => $data['id_radnika'],
                 'ime_radnika' => $data['ime_radnika'],
-                'id_posla' => $data['id_posla'],
                 'seconds' => $seconds,
                 'duration' => self::secondsToDuration($seconds),
             ];
         }
         usort($result, static function (array $a, array $b): int {
-            $c = strcmp($a['id_radnika'], $b['id_radnika']);
-            return $c !== 0 ? $c : $a['id_posla'] <=> $b['id_posla'];
+            return strcmp($a['id_radnika'], $b['id_radnika']);
         });
         return $result;
     }
@@ -241,7 +238,7 @@ SQL;
         $to = (new \DateTimeImmutable($toDate . ' 00:00:00'))->modify('+1 day')->format('Y-m-d');
         $events = $this->fetchEvents($from, $to);
         $intervals = $this->buildIntervals($events);
-        $byWorkDayPosla = [];
+        $byWorkDay = [];
         foreach ($intervals as $iv) {
             if ($iv['id_radnika'] !== $workerId) {
                 continue;
@@ -254,32 +251,27 @@ SQL;
             if ($workDay < $fromDate || $workDay > $toDate) {
                 continue;
             }
-            $key = $workDay . "\0" . $iv['id_posla'];
-            if (!isset($byWorkDayPosla[$key])) {
-                $byWorkDayPosla[$key] = [
+            if (!isset($byWorkDay[$workDay])) {
+                $byWorkDay[$workDay] = [
                     'ime_radnika' => $iv['ime_radnika'],
-                    'date' => $workDay,
-                    'id_posla' => $iv['id_posla'],
                     'intervals' => [],
                 ];
             }
-            $byWorkDayPosla[$key]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
+            $byWorkDay[$workDay]['intervals'][] = ['start_dt' => $iv['start_dt'], 'end_dt' => $iv['end_dt']];
         }
         $result = [];
-        foreach ($byWorkDayPosla as $data) {
+        foreach ($byWorkDay as $workDay => $data) {
             $seconds = $this->mergeIntervalSeconds($data['intervals']);
             $result[] = [
                 'id_radnika' => $workerId,
                 'ime_radnika' => $data['ime_radnika'],
-                'date' => $data['date'],
-                'id_posla' => $data['id_posla'],
+                'date' => $workDay,
                 'seconds' => $seconds,
                 'duration' => self::secondsToDuration($seconds),
             ];
         }
         usort($result, static function (array $a, array $b): int {
-            $c = strcmp($a['date'], $b['date']);
-            return $c !== 0 ? $c : $a['id_posla'] <=> $b['id_posla'];
+            return strcmp($a['date'], $b['date']);
         });
         return $result;
     }
