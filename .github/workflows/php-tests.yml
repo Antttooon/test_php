@@ -2,7 +2,8 @@ name: PHP Tests
 
 on:
   push:
-    branches: [ main, refactor, "*" ]
+    branches:
+      - '**'
   pull_request:
 
 jobs:
